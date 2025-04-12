@@ -1,2 +1,4 @@
 from .token import Token
-from .pair import Pair, CointPair
+from .pair import Pair
+
+__all__ = ['Token']

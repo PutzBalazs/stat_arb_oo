@@ -1,8 +1,8 @@
 import os
-import joblib
-from .storage_interface import DataStorage
+import pickle
+from .storage_interface import DataStorage  # Import the DataStorage interface
 
-class JoblibDataStorage(DataStorage):
+class PickleDataStorage(DataStorage):  # Implementing DataStorage interface
     def __init__(self, base_path="data/"):
         self.base_path = base_path
 
@@ -10,12 +10,13 @@ class JoblibDataStorage(DataStorage):
         # Ensure the folder exists
         folder_path = os.path.join(self.base_path, folder)
         os.makedirs(folder_path, exist_ok=True)
-        return os.path.join(folder_path, f"{file_name}.joblib")  # Use .joblib extension
+        return os.path.join(folder_path, f"{file_name}.pkl")  # Use .pkl extension for pickle files
 
     def save(self, data, folder, file_name):
         file_path = self._get_file_path(folder, file_name)
         try:
-            joblib.dump(data, file_path)  # Use joblib.dump instead of pickle.dump
+            with open(file_path, "wb") as f:  # Open file in write-binary mode
+                pickle.dump(data, f)  # Serialize the data
             print(f"Data saved to {file_path}")
         except Exception as e:
             print(f"Error saving data: {e}")
@@ -23,7 +24,8 @@ class JoblibDataStorage(DataStorage):
     def read(self, folder, file_name):
         file_path = self._get_file_path(folder, file_name)
         try:
-            return joblib.load(file_path)  # Use joblib.load instead of pickle.load
+            with open(file_path, "rb") as f:  # Open file in read-binary mode
+                return pickle.load(f)  # Deserialize the data
         except Exception as e:
             print(f"Error reading data: {e}")
-            return None 
+            return None
