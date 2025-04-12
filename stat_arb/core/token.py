@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 from typing import Dict, List, Optional
+import matplotlib.pyplot as plt
+from lightweight_charts import Chart
 
 class Token:
     def __init__(self, address: str, data: Dict):
@@ -64,8 +66,13 @@ class Token:
             return self.close_prices / self.close_prices.iloc[0]
         return pd.Series()
 
+
     def visualize(self, plot_type: str = 'price'):
         """Visualize the token data"""
+        if plot_type == 'kline':
+            self.visualize_kline()
+            return
+            
         import matplotlib.pyplot as plt
         
         if self.close_prices.empty:
@@ -86,6 +93,21 @@ class Token:
         plt.legend()
         plt.grid(True)
         plt.show()
+
+    def visualize_kline(self):
+        """Visualize the token data using candlestick chart"""
+        if self.ohlc_data.empty:
+            print("No OHLC data available for visualization")
+            return
+        data = self.ohlc_data.copy().sort_values('timestamp', ascending=True).reset_index(drop=True)
+        data['time'] = pd.to_datetime(data['timestamp']).dt.strftime('%Y-%m-%d')
+        data = data[['time', 'open', 'high', 'low', 'close']]
+        data['volume'] = 0
+        chart = Chart(toolbox=True)
+        chart.set(data)
+        chart.layout(background_color='#FFFACD', text_color='#000000')
+        chart.grid(vert_enabled=False, horz_enabled=False)
+        chart.show(block=True)
 
     def info(self) -> Dict:
         """Return basic information about the token"""

@@ -5,9 +5,10 @@ import pandas as pd
 from dotenv import load_dotenv
 
 
+# TODO: require API key
 load_dotenv()
 API_KEY = os.getenv('API_KEY')
-print(f"API_KEY: {API_KEY}")
+#print(f"API_KEY: {API_KEY}")
 
 def get_all_tokens(chain_id=1):
     print(API_KEY)

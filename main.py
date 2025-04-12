@@ -1,7 +1,7 @@
 from stat_arb.storage import JoblibDataStorage
 from stat_arb.dex import OneInchDex
-from stat_arb.core import Token
-from stat_arb.clusterer import DBSCANClusterer
+from stat_arb.core import Token, Pair
+from stat_arb.clusterer import DBSCANClusterer, KMeansClusterer
 
 def print_tokens_info(tokens):
     """Print information about all tokens"""
@@ -53,13 +53,16 @@ def test_token_functions(token):
     token.visualize(plot_type='returns')
 
 def test_clustering(tokens):
-    """Test DBSCAN clustering on tokens"""
-    print("\nTesting DBSCAN Clustering:")
+    """Test both DBSCAN and KMeans clustering on tokens"""
+    print("\nTesting Clustering Algorithms:")
     print("=" * 50)
     
+    # Test DBSCAN Clustering
+    print("\nTesting DBSCAN Clustering:")
+    print("-" * 30)
     try:
-        # Initialize clusterer with different parameters
-        clusterer = DBSCANClusterer(
+        # Initialize DBSCAN clusterer
+        dbscan = DBSCANClusterer(
             tokens=tokens,
             n_components=2,
             eps=0.5,
@@ -67,42 +70,114 @@ def test_clustering(tokens):
         )
         
         # Run clustering
-        clusters = clusterer.run()
+        dbscan_clusters = dbscan.run()
         
         # Get cluster info
-        info = clusterer.get_cluster_info()
+        dbscan_info = dbscan.get_cluster_info()
         
         # Print clustering results
-        print("\nClustering Results:")
-        print(f"Number of clusters: {info['n_clusters']}")
-        print(f"Number of noise points: {info['n_noise']}")
+        print("\nDBSCAN Results:")
+        print(f"Number of clusters: {dbscan_info['n_clusters']}")
+        print(f"Number of noise points: {dbscan_info['n_noise']}")
         print("\nCluster Sizes:")
-        for cluster, size in info['cluster_sizes'].items():
+        for cluster, size in dbscan_info['cluster_sizes'].items():
             print(f"{cluster}: {size} tokens")
         
         print("\nExplained Variance:")
-        print(info['explained_variance'])
+        print(dbscan_info['explained_variance'])
         
         # Print tokens in each cluster
-        print("\nTokens in Clusters:")
-        for i, cluster in enumerate(clusters):
+        print("\nTokens in DBSCAN Clusters:")
+        for i, cluster in enumerate(dbscan_clusters):
             print(f"\nCluster {i}:")
             for token in cluster:
                 print(f"  - {token.symbol}")
         
-        # Create and print pairs
-        pairs = clusterer.make_pairs()
-        print(f"\nNumber of pairs created: {len(pairs)}")
-        print("\nFirst 5 pairs:")
-        for i, pair in enumerate(pairs[:5]):
-            print(f"Pair {i+1}: {pair[0].symbol} - {pair[1].symbol}")
-        
-        # Visualize clusters
-        print("\nVisualizing clusters...")
-        clusterer.visualize()
+        # Visualize DBSCAN clusters
+        print("\nVisualizing DBSCAN clusters...")
+        dbscan.visualize()
+        # Create and test pairs
+        dbscan_pairs = dbscan.make_pairs()
+        print(f"\nNumber of DBSCAN pairs created: {len(dbscan_pairs)}")
+        print("\nTesting first 5 DBSCAN pairs:")
+        for i, pair in enumerate(dbscan_pairs[:5]):
+            print(f"\nPair {i+1}: {pair}")
+            print("Pair Info:")
+            pair_info = pair.info()
+            for key, value in pair_info.items():
+                print(f"  {key}: {value}")
+            pair.visualize(plot_type='prices')
+            pair.visualize(plot_type='spread')
+      
         
     except Exception as e:
-        print(f"Error in clustering: {str(e)}")
+        print(f"Error in DBSCAN clustering: {str(e)}")
+    
+    # Test KMeans Clustering
+    print("\nTesting KMeans Clustering:")
+    print("-" * 30)
+    try:
+        # Initialize KMeans clusterer
+        kmeans = KMeansClusterer(
+            tokens=tokens,
+            n_components=2,
+            n_clusters=3,
+            random_state=42
+        )
+        
+        # Run clustering
+        kmeans_clusters = kmeans.run()
+        
+        # Get cluster info
+        kmeans_info = kmeans.get_cluster_info()
+        
+        # Print clustering results
+        print("\nKMeans Results:")
+        print(f"Number of clusters: {kmeans_info['n_clusters']}")
+        print("\nCluster Sizes:")
+        for cluster, size in kmeans_info['cluster_sizes'].items():
+            print(f"{cluster}: {size} tokens")
+        
+        print("\nExplained Variance:")
+        print(kmeans_info['explained_variance'])
+        
+        # Print tokens in each cluster
+        print("\nTokens in KMeans Clusters:")
+        for i, cluster in enumerate(kmeans_clusters):
+            print(f"\nCluster {i}:")
+            for token in cluster:
+                print(f"  - {token.symbol}")
+        
+        # Visualize KMeans clusters
+        print("\nVisualizing KMeans clusters...")
+        kmeans.visualize()
+        # Create and test pairs
+        kmeans_pairs = kmeans.make_pairs()
+        print(f"\nNumber of KMeans pairs created: {len(kmeans_pairs)}")
+        print("\nTesting first 5 KMeans pairs:")
+        for i, pair in enumerate(kmeans_pairs[:5]):
+            print(f"\nPair {i+1}: {pair}")
+            print("Pair Info:")
+            pair_info = pair.info()
+            for key, value in pair_info.items():
+                print(f"  {key}: {value}")
+            pair.visualize(plot_type='prices')
+            pair.visualize(plot_type='spread')
+            
+        
+        
+        # Save clusters and pairs
+        data_storage = JoblibDataStorage(base_path="data/")
+        data_storage.save({
+            'dbscan_clusters': dbscan_clusters,
+            'dbscan_pairs': dbscan_pairs,
+            'kmeans_clusters': kmeans_clusters,
+            'kmeans_pairs': kmeans_pairs
+        }, "clustering", "clustering_results")
+        print("\nSaved clustering results to storage")
+        
+    except Exception as e:
+        print(f"Error in KMeans clustering: {str(e)}")
 
 def main():
     # Initialize JolibDataStorage
@@ -126,14 +201,17 @@ def main():
         print("Saved new tokens to storage")
     
     # Print all tokens info
-    print_tokens_info(tokens)
+    """print_tokens_info(tokens)"""
     
     # Test functions on first token if available
     if tokens:
-        print("\nTesting first token:")
-        test_token_functions(tokens[0])        
+        #print("\nTesting first token:")
+        #test_token_functions(tokens[0]) 
+        first_token = tokens[0]
+        print("starting kline")
+        first_token.visualize(plot_type='kline')
         # Test clustering
-        test_clustering(tokens)
+        #test_clustering(tokens)
     else:
         print("No tokens available for testing")
 
