@@ -2,6 +2,7 @@ from stat_arb.storage import JoblibDataStorage
 from stat_arb.dex import OneInchDex
 from stat_arb.core import Token, Pair, CointPair
 from stat_arb.clusterer import DBSCANClusterer, KMeansClusterer
+from stat_arb.core.backtester import Backtester
 import logging
 
 def print_tokens_info(tokens):
@@ -275,25 +276,32 @@ def main():
             first_pair = all_cointegrated_pairs[0]
             print(f"\nRunning backtest on first cointegrated pair: {first_pair}")
             
+            # Create backtester
+            backtester = Backtester(first_pair)
+            
             # Run backtest with different entry thresholds
             entry_std = 1.0
+            initial_capital = 1000.0
             
             print(f"\nBacktesting with entry threshold: {entry_std} standard deviations")
-            results = first_pair.backtest(entry_std=entry_std, exit_std=0.0)
+            results = backtester.run(entry_std=entry_std, exit_std=0.0, initial_capital=initial_capital)
             
-            if results['success']:
+            if results.success:
                 print("\nBacktest Results:")
-                print(f"Total Trades: {results['total_trades']}")
-                print(f"Win Rate: {results['win_rate']:.2%}")
-                print(f"Total PnL: {results['total_pnl']:.2f}")
-                print(f"Avg PnL: {results['avg_pnl']:.2f}")
-                print(f"Sharpe Ratio: {results['sharpe_ratio']:.2f}")
-                print(f"Max Drawdown: {results['max_drawdown']:.2%}")
+                print(f"Initial Capital: ${results.initial_capital:.2f}")
+                print(f"Final Capital: ${results.final_capital:.2f}")
+                print(f"Total Return: {((results.final_capital/results.initial_capital)-1):.2%}")
+                print(f"Total Trades: {results.total_trades}")
+                print(f"Win Rate: {results.win_rate:.2%}")
+                print(f"Total PnL: ${results.total_pnl:.2f}")
+                print(f"Avg PnL: ${results.avg_pnl:.2f}")
+                print(f"Sharpe Ratio: {results.sharpe_ratio:.2f}")
+                print(f"Max Drawdown: {results.max_drawdown:.2%}")
                 
                 # Visualize the backtest results
-                first_pair.visualize_backtest(entry_std=entry_std, exit_std=0.0)
+                backtester.visualize(entry_std=entry_std, exit_std=0.0, initial_capital=initial_capital)
             else:
-                print(f"Backtest failed: {results['error']}")
+                print(f"Backtest failed: {results.error}")
         else:
             print("No cointegrated pairs found for backtesting")
         
