@@ -5,7 +5,6 @@ import json
 from web3 import Web3
 from dotenv import load_dotenv
 
-# Load environment variables
 load_dotenv() 
 chainId = 42161 
 web3RpcUrl = os.getenv("RPC_URL") 
@@ -15,21 +14,35 @@ privateKey = os.getenv("PRIVATE_KEY")
 headers = { "Authorization": f"Bearer {api_key}", "accept": "application/json" }
 apiBaseUrl = f"https://api.1inch.dev/swap/v6.0/{chainId}"
 broadcast_api_url = f"https://api.1inch.dev/tx-gateway/v1.1/{chainId}/broadcast"
+print("API Base URL: ", broadcast_api_url)
 web3 = Web3(Web3.HTTPProvider(web3RpcUrl))
 walletAddress = web3.to_checksum_address(walletAddress)
+swapParams = {
+    "src": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",  
+    "dst": "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1", 
+    "amount": web3.to_wei(0.0002, "ether"),
+    "from": walletAddress,
+    "slippage": 1,  # Maximum acceptable slippage percentage for the swap (e.g., 1 for 1%)
+    "disableEstimate": False, 
+    "allowPartialFill": False,  
+}
 
+##
+## Helper Functions
+##
+
+# Construct full API request URL
 def apiRequestUrl(methodName, queryParams):
     return f"{apiBaseUrl}{methodName}?{'&'.join([f'{key}={value}' for key, value in queryParams.items()])}"
 
+# Function to check token allowance
 def checkAllowance(tokenAddress, walletAddress):
-    """Check token allowance"""
     url = apiRequestUrl("/approve/allowance", {"tokenAddress": tokenAddress, "walletAddress": walletAddress})
     response = requests.get(url, headers=headers)
     data = response.json()
     return data["allowance"]
 
 async def broadCastRawTransaction(raw_transaction):
-    """Broadcast a raw transaction"""
     try:
         headers = {
             "Content-Type": "application/json",
@@ -40,9 +53,10 @@ async def broadCastRawTransaction(raw_transaction):
         response = requests.post(broadcast_api_url, data=body, headers=headers)
         print(f"Broadcast response: {response.status_code}, {response.text}")
 
+        # If the response is successful, return the transaction hash
         if response.status_code == 200:
             res = response.json()
-            return res.get('transactionHash')
+            return res.get('transactionHash')  # Assuming the response contains 'transactionHash'
         else:
             print(f"Error broadcasting transaction: {response.status_code}, {response.text}")
             return None
@@ -51,26 +65,36 @@ async def broadCastRawTransaction(raw_transaction):
         return None
     
 async def signAndSendTransaction(transaction):
-    """Sign and send a transaction"""
+    # Get the nonce for the sender's address
     nonce = web3.eth.get_transaction_count(walletAddress)
+
+    # Add the nonce to the transaction
     transaction['nonce'] = nonce
+
+    # Convert gasPrice and value to integers
     transaction['gasPrice'] = int(transaction['gasPrice'])
     transaction['value'] = int(transaction['value'])
     transaction['to'] = web3.to_checksum_address(transaction['to'])
     transaction['from'] = walletAddress
 
+    # Sign the transaction with the private key
     signed_transaction = web3.eth.account.sign_transaction(transaction, privateKey)
+
+    # Broadcast the transaction
     return await broadCastRawTransaction(signed_transaction.rawTransaction.hex())
 
+
+# Helper function to estimate gas limit
 async def estimateGasLimit(transaction):
-    """Estimate gas limit for a transaction"""
     gas_price = transaction["gasPrice"]
     to_address = transaction["to"]
     value = transaction["value"]
     
+    #checksum address
     wallet_address = web3.to_checksum_address(walletAddress)
     to_address = web3.to_checksum_address(to_address)
     
+    # Estimate gas limit
     try:
         gas_limit = web3.eth.estimate_gas({
             "from": wallet_address,
@@ -81,11 +105,13 @@ async def estimateGasLimit(transaction):
         })
     except Exception as e:
         print(f"Error estimating gas: {e}")
+        # return an arbitrary gas limit if estimation fails
         gas_limit = 50000
     return gas_limit
     
+# Prepare approval transaction, considering gas limit
 async def buildTxForApproveTradeWithRouter(token_address, amount=None):
-    """Build approval transaction"""
+    # Assuming you have defined apiRequestUrl() function to construct the URL
     url = apiRequestUrl("/approve/transaction", {"tokenAddress": token_address, "amount": amount} if amount else {"tokenAddress": token_address})
     response = requests.get(url, headers=headers)
     transaction = response.json()
@@ -93,39 +119,35 @@ async def buildTxForApproveTradeWithRouter(token_address, amount=None):
     return {**transaction, "gas": gas_limit}
 
 def buildTxForSwap(swapParams):
-    """Build swap transaction"""
     url = apiRequestUrl("/swap", swapParams)
-    print(f"Swap URL: {url}")
-    print(f"Swap Parameters: {swapParams}")
-    response = requests.get(url, headers={'Authorization': api_key})
-    print(f"Response Status: {response.status_code}")
-    print(f"Response Headers: {response.headers}")
-    print(f"Response Text: {response.text}")
-    swapTransaction = response.json()["tx"]
+    swapTransaction = requests.get(url,  headers={'Authorization': api_key}).json()["tx"]
     return swapTransaction
+#
+# Main Script
+#
 
-async def execute_swap_transaction(swap_params):
-    """Execute a complete swap transaction including approval and swap"""
-    # Check allowance
-    allowance = checkAllowance(swap_params["src"], walletAddress)
+async def main():
+    
+    #itt van valami error try catch??
+    """ allowance = checkAllowance(swapParams["src"], walletAddress)
     print("Allowance: ", int(allowance))
+    if int(allowance) > int(swapParams["amount"]): """
     
-    # If allowance is insufficient, approve
-    if int(allowance) < int(swap_params["amount"]):
-        print("Insufficient allowance, approving...")
-        transactionForSign = await buildTxForApproveTradeWithRouter(swap_params["src"])
-        print("Prepared Transaction for Approval:", transactionForSign)
-        approveTxHash = await signAndSendTransaction(transactionForSign)
-        print("Approve tx hash: ", approveTxHash)
     
-    # Execute the swap
-    swapTransaction = buildTxForSwap(swap_params)
+    # Prepare approval transaction and sign it
+    transactionForSign = await buildTxForApproveTradeWithRouter(swapParams["src"])
+    print("Prepared Transaction for Approval:", transactionForSign)
+    # Sign and send the transaction for approval
+    print("Approving the tx...")
+    approveTxHash = await signAndSendTransaction(transactionForSign)
+    print("Approve tx hash: ", approveTxHash)
+    swapTransaction = buildTxForSwap(swapParams)
     print("Transaction for swap: ", swapTransaction)
     swapTxHash = await signAndSendTransaction(swapTransaction)
     print("Swap tx hash: ", swapTxHash)
     
-    return swapTxHash
+    
 
 # Run the main function
 if __name__ == "__main__":
-    asyncio.run(execute_swap_transaction(swapParams)) 
+    asyncio.run(main()) 

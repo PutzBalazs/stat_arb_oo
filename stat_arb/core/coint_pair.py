@@ -41,26 +41,30 @@ class CointPair(Pair):
     
     def _calculate_cointegration(self, series_1: pd.Series, series_2: pd.Series) -> Tuple:
         """Calculate cointegration between two price series"""
-        coint_flag = 0
-        coint_res = coint(series_1, series_2)
-        coint_t = coint_res[0]
-        p_value = coint_res[1]
-        critical_value = coint_res[2][1]
-        
-        # Calculate hedge ratio using OLS
-        model = sm.OLS(series_1, series_2).fit()
-        hedge_ratio = model.params.iloc[0]
-        
-        # Calculate spread
-        spread = self._calculate_spread(series_1, series_2, hedge_ratio)
-        zero_crossings = len(np.where(np.diff(np.sign(spread)))[0])
-        
-        # Determine cointegration
-        if p_value < 0.5 and coint_t < critical_value:
-            coint_flag = 1
+        try:
+            coint_flag = 0
+            coint_res = coint(series_1, series_2)
+            coint_t = coint_res[0]
+            p_value = coint_res[1]
+            critical_value = coint_res[2][1]
             
-        return (coint_flag, round(p_value, 2), round(coint_t, 2), 
-                round(critical_value, 2), round(hedge_ratio, 2), zero_crossings)
+            # Calculate hedge ratio using OLS
+            model = sm.OLS(series_1, series_2).fit()
+            hedge_ratio = model.params.iloc[0]
+            
+            # Calculate spread
+            spread = self._calculate_spread(series_1, series_2, hedge_ratio)
+            zero_crossings = len(np.where(np.diff(np.sign(spread)))[0])
+            
+            # Determine cointegration
+            if p_value < 0.5 and coint_t < critical_value:
+                coint_flag = 1
+                
+            return (coint_flag, round(p_value, 2), round(coint_t, 2), 
+                    round(critical_value, 2), round(hedge_ratio, 2), zero_crossings)
+        except Exception as e:
+            print(f"Error calculating cointegration: {e}")
+            return (0, 1.0, 0.0, 0.0, 0.0, 0)
     
     def _calculate_spread(self, series_1: pd.Series, series_2: pd.Series, hedge_ratio: float) -> pd.Series:
         """Calculate the spread between two price series"""
@@ -198,4 +202,5 @@ class CointPair(Pair):
         fig.text(0.02, 0.02, stats_text, fontsize=10, bbox=dict(facecolor='white', alpha=0.8))
 
         plt.tight_layout()
+        plt.subplots_adjust(top=0.92)  # A szubplotok tetejét lejjebb húzza
         plt.show()

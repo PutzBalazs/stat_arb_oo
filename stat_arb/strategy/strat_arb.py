@@ -4,17 +4,21 @@ from ..core.coint_pair import CointPair
 from ..core.backtester import Backtester
 from ..clusterer import DBSCANClusterer, KMeansClusterer
 from ..storage import JoblibDataStorage
+from ..storage.storage_interface import DataStorage
 from ..dex import OneInchDex
+from ..dex.dex_interface import Dex
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import logging
 from typing import List, Dict, Optional
+import asyncio
 
 class StatArb:
-    def __init__(self, data_path: str = "data/"):
-        """Initialize StatArb with data storage path"""
-        self.data_storage = JoblibDataStorage(base_path=data_path)
+    def __init__(self, storage: DataStorage = None, dex: Dex = None, data_path: str = "data/"):
+        """Initialize StatArb with storage and DEX interfaces"""
+        self.data_storage = storage or JoblibDataStorage(base_path=data_path)
+        self.dex = dex or OneInchDex()
         self.tokens: List[Token] = []
         self.coint_pairs: List[CointPair] = []
         self.clustering_results: Dict = {}
@@ -25,6 +29,8 @@ class StatArb:
         try:
             print("Attempting to load existing tokens...")
             self.tokens = self.data_storage.read("dex", "oneinch_tokens")
+            if not self.tokens:
+                raise ValueError("No tokens found in storage")
             print("Successfully loaded tokens from storage")
         except Exception as e:
             print(f"Could not load tokens: {e}")
@@ -91,7 +97,7 @@ class StatArb:
         token.visualize(plot_type='returns')
 
     def run_clustering(self):
-        """Run both DBSCAN and KMeans clustering on tokens"""
+        """Run both DBSCAN and KMeans clustering on tokens"""    
         print("\nRunning Clustering Algorithms:")
         print("=" * 50)
         
@@ -183,11 +189,29 @@ class StatArb:
         
         return cointegrated_pairs
 
-    def find_cointegrated_pairs(self):
+    def find_cointegrated_pairs(self, uppdate=False, load_from_storage=True):
         """Find cointegrated pairs from clustering results"""
+        
+        if load_from_storage:
+            try:
+                print("Attempting to load existing cointegrated pairs...")
+                self.coint_pairs = self.data_storage.read("coint_pairs", "cointegrated_pairs")
+                if self.coint_pairs:
+                    print("Successfully loaded cointegrated pairs from storage")
+                    return self.coint_pairs
+                else:
+                    print("No cointegrated pairs found in storage")
+            except Exception as e:
+                print(f"Loading from storage failed: {e}. Proceeding with clustering results.")
+                
+        print("Loading from storage is disabled. Proceeding with clustering results.")
         if not self.clustering_results:
             print("No clustering results available. Run clustering first.")
             return []
+        
+        if not uppdate and self.coint_pairs:
+            print("Cointegrated pairs already found. Returning existing pairs.")
+            return self.coint_pairs
         
         all_cointegrated_pairs = []
         
@@ -196,17 +220,17 @@ class StatArb:
         kmeans_coint_pairs = self.process_cluster_pairs(self.clustering_results['kmeans_pairs'])
         all_cointegrated_pairs.extend(kmeans_coint_pairs)
         
-        # Process DBSCAN pairs
+        """ # Process DBSCAN pairs
         print("\nProcessing DBSCAN pairs...")
         dbscan_coint_pairs = self.process_cluster_pairs(self.clustering_results['dbscan_pairs'])
-        all_cointegrated_pairs.extend(dbscan_coint_pairs)
+        all_cointegrated_pairs.extend(dbscan_coint_pairs) """
         
         print(f"\nFound total of {len(all_cointegrated_pairs)} cointegrated pairs")
         
         # Save cointegrated pairs
         self.coint_pairs = all_cointegrated_pairs
-        self.data_storage.save(self.coint_pairs, "pairs", "cointegrated_pairs")
-        print("Saved cointegrated pairs to storage")
+        self.data_storage.save(self.coint_pairs, "coint_pairs", "cointegrated_pairs")
+        print("Saved cointegrated pairs to storage")   
         
         return self.coint_pairs
 
@@ -243,3 +267,40 @@ class StatArb:
             print(f"Backtest failed: {results.error}")
         
         return results
+
+    def execute_trade(self, pair: CointPair, amount: float = 0.0005, slippage: float = 1.0):
+        """Execute a trade based on the cointegrated pair's signal"""
+        signal = pair.get_trade_signal()
+        if not signal:
+            print("No valid trade signal")
+            return None
+            
+        print(f"Executing {signal} trade for pair {pair}")
+        
+        try:
+            if signal == 'long':
+                # Long token1, short token2
+                tx_hash = self.dex.execute_swap(
+                    src_token=pair.token2.address,
+                    dst_token=pair.token1.address,
+                    amount=amount,
+                    slippage=slippage
+                )
+            elif signal == 'short':
+                # Short token1, long token2
+                tx_hash = self.dex.execute_swap(
+                    src_token=pair.token1.address,
+                    dst_token=pair.token2.address,
+                    amount=amount,
+                    slippage=slippage
+                )
+            else:  # exit signal
+                print("Exit signal received, no trade executed")
+                return None
+                
+            print(f"Trade executed successfully! Transaction hash: {tx_hash}")
+            return tx_hash
+            
+        except Exception as e:
+            print(f"Failed to execute trade: {str(e)}")
+            return None

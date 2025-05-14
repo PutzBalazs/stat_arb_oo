@@ -1,0 +1,187 @@
+classDiagram
+    class DataStorage {
+        <<abstract>>
+        +save(data: Any, folder: str, file_name: str)
+        +read(folder: str, file_name: str) Any
+    }
+
+    class Dex {
+        <<abstract>>
+        +fetch_and_prepare_data() List[Token]
+        +execute_swap(src_token: str, dst_token: str, amount: float, slippage: float) str
+        +get_token_data(token_address: str) Dict
+    }
+
+    class StatArb {
+        -DataStorage data_storage
+        -Dex dex
+        -List[Token] tokens
+        -List[CointPair] coint_pairs
+        -Dict clustering_results
+        -Dict backtest_results
+        +__init__(storage: DataStorage, dex: Dex, data_path: str)
+        +load_or_fetch_tokens(chain_id: int, max_tokens: int) List[Token]
+        +print_tokens_info()
+        +test_token_functions(token: Token)
+        +run_clustering()
+        +process_cluster_pairs(pairs: List[Pair], z_score_window: int) List[CointPair]
+        +find_cointegrated_pairs() List[CointPair]
+        +print_cointegrated_pairs_summary()
+        +run_backtest(pair: CointPair, entry_std: float, exit_std: float, initial_capital: float)
+        +execute_trade(pair: CointPair, amount: float, slippage: float) str
+    }
+
+    class Token {
+        -str address
+        -str name
+        -str symbol
+        -int decimals
+        -str logo
+        -pd.DataFrame ohlc_data
+        -pd.Series close_prices
+        -pd.Series normalized_prices
+        -pd.Series log_returns
+        +__init__(address: str, name: str, symbol: str, decimals: int, logo: str)
+        +calc_log_returns() pd.Series
+        +normalize() pd.Series
+        +info() Dict
+        +visualize(plot_type: str)
+    }
+
+    class Pair {
+        -Token token1
+        -Token token2
+        -pd.Series spread
+        -float hedge_ratio
+        -bool is_cointegrated
+        +__init__(token1: Token, token2: Token)
+        +symbols() Tuple[str, str]
+        +spread() pd.Series
+        +hedge_ratio() float
+        +check_cointegration() bool
+        +visualize(plot_type: str)
+        +info() Dict
+    }
+
+    class CointPair {
+        -int z_score_window
+        -Tuple cointegration_results
+        -float hedge_ratio
+        -pd.Series spread
+        -pd.Series zscore
+        -int zero_crossings
+        +__init__(token1: Token, token2: Token, z_score_window: int)
+        +_calculate_all_metrics()
+        +_calculate_cointegration(series_1: pd.Series, series_2: pd.Series) Tuple
+        +_calculate_spread(series_1: pd.Series, series_2: pd.Series, hedge_ratio: float) pd.Series
+        +_calculate_zscore(spread: pd.Series) pd.Series
+        +is_cointegrated() bool
+        +cointegration_stats() Dict
+        +spread() pd.Series
+        +zscore() pd.Series
+        +get_trade_signal() str
+        +info() Dict
+        +visualize_spread()
+    }
+
+    class Backtester {
+        -CointPair pair
+        -List[Trade] trades
+        -str current_position
+        -float entry_price
+        -pd.Timestamp entry_time
+        -float entry_zscore
+        -float current_capital
+        +__init__(pair: CointPair)
+        +run(entry_std: float, exit_std: float, initial_capital: float) BacktestResult
+        +_calculate_max_drawdown(cumulative_returns: pd.Series) float
+        +visualize(entry_std: float, exit_std: float, initial_capital: float)
+    }
+
+    class Trade {
+        +pd.Timestamp entry_time
+        +pd.Timestamp exit_time
+        +float entry_price
+        +float exit_price
+        +str position
+        +float pnl
+        +float entry_zscore
+        +float exit_zscore
+    }
+
+    class BacktestResult {
+        +bool success
+        +str error
+        +float initial_capital
+        +float final_capital
+        +int total_trades
+        +int winning_trades
+        +int losing_trades
+        +float win_rate
+        +float total_pnl
+        +float avg_pnl
+        +float max_drawdown
+        +float sharpe_ratio
+        +List[Dict] trades
+    }
+
+    class DBSCANClusterer {
+        -List[Token] tokens
+        -int n_components
+        -float eps
+        -int min_samples
+        +__init__(tokens: List[Token], n_components: int, eps: float, min_samples: int)
+        +run() List[List[Token]]
+        +get_cluster_info() Dict
+        +make_pairs() List[Pair]
+        +visualize()
+    }
+
+    class KMeansClusterer {
+        -List[Token] tokens
+        -int n_components
+        -int n_clusters
+        -int random_state
+        +__init__(tokens: List[Token], n_components: int, n_clusters: int, random_state: int)
+        +run() List[List[Token]]
+        +get_cluster_info() Dict
+        +make_pairs() List[Pair]
+        +visualize()
+    }
+
+    class JoblibDataStorage {
+        -str base_path
+        +__init__(base_path: str)
+        +save(data: Any, folder: str, file_name: str)
+        +read(folder: str, file_name: str) Any
+    }
+
+    class OneInchDex {
+        -int chain_id
+        -int max_tokens
+        +__init__(chain_id: int, max_tokens: int)
+        +fetch_and_prepare_data() List[Token]
+        +execute_swap(src_token: str, dst_token: str, amount: float, slippage: float) str
+        +get_token_data(token_address: str) Dict
+    }
+
+    DataStorage <|-- JoblibDataStorage : implements
+    Dex <|-- OneInchDex : implements
+    StatArb --> DataStorage : uses
+    StatArb --> Dex : uses
+    StatArb --> Token : manages
+    StatArb --> CointPair : manages
+    StatArb --> Backtester : uses
+    StatArb --> DBSCANClusterer : uses
+    StatArb --> KMeansClusterer : uses
+    
+    Pair --> Token : contains
+    CointPair --|> Pair : inherits
+    Backtester --> CointPair : uses
+    Backtester --> Trade : creates
+    Backtester --> BacktestResult : returns
+    
+    DBSCANClusterer --> Token : clusters
+    KMeansClusterer --> Token : clusters
+    DBSCANClusterer --> Pair : creates
+    KMeansClusterer --> Pair : creates

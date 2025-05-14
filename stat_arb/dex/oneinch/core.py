@@ -1,8 +1,10 @@
 from . import fetch_utils
+from . import exec_utils
 from stat_arb.core.token import Token
 import pandas as pd
 import numpy as np
 from sklearn.decomposition import PCA
+import asyncio
 
 class OneInchDex:
     def __init__(self, chain_id=1, granularity="day", limit=30, api_wait=1, max_tokens=100):
@@ -17,7 +19,12 @@ class OneInchDex:
         print("Fetching tokens...")
         all_tokens = fetch_utils.get_all_tokens(self.chain_id)
         print(f"Found {len(all_tokens)} tokens")
-
+        
+        # Filter out tokens with 'USD' in their name
+        all_tokens = {address: token_info for address, token_info in all_tokens.items() 
+                        if 'USD' not in token_info.get('symbol', '') and 'USD' not in token_info.get('name', '')}
+        print(f"After filtering out USD tokens: {len(all_tokens)} tokens")
+        
         print("Extracting basic token info...")
         token_data = fetch_utils.extract_basic_token_info(all_tokens, self.max_tokens)
         print(f"Selected {len(token_data)} tokens for analysis")
@@ -106,5 +113,24 @@ class OneInchDex:
             'variance': variance,
             'transformed_data': pca_results['transformed_data']
         }
+
+    def execute_swap(self, src_token: str, dst_token: str, amount: float, slippage: float = 1.0):
+        """Execute a swap transaction through 1inch"""
+        # Convert amount to wei
+        amount_wei = exec_utils.web3.to_wei(amount, "ether")
+        
+        # Prepare swap parameters
+        swap_params = {
+            "src": src_token,
+            "dst": dst_token,
+            "amount": amount_wei,
+            "from": exec_utils.walletAddress,
+            "slippage": slippage,
+            "disableEstimate": False,
+            "allowPartialFill": False,
+        }
+        
+        # Execute the swap using exec_utils
+        return asyncio.run(exec_utils.execute_swap_transaction(swap_params))
 
     

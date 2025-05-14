@@ -1,0 +1,46 @@
+classDiagram
+    class DataStorage {
+        <<interface>>
+        +save(data, folder, file_name)
+        +read(folder, file_name)
+    }
+
+    class Dex {
+        <<interface>>
+        +fetch_and_prepare_data()
+        +execute_swap(src_token, dst_token, amount, slippage)
+        +get_token_data(token_address)
+    }
+
+    class StatArb {
+        -DataStorage data_storage
+        -Dex dex
+        -List[Token] tokens
+        -List[CointPair] coint_pairs
+        +load_or_fetch_tokens()
+        +find_cointegrated_pairs()
+        +execute_trade()
+    }
+
+    class Token {
+        -str address
+        -str symbol
+        -float price
+        +calc_log_returns()
+        +normalize()
+    }
+
+    class CointPair {
+        -Token token1
+        -Token token2
+        -float hedge_ratio
+        +get_trade_signal()
+    }
+
+    DataStorage <|-- JoblibDataStorage
+    Dex <|-- OneInchDex
+    StatArb --> DataStorage : uses
+    StatArb --> Dex : uses
+    StatArb --> Token : manages
+    StatArb --> CointPair : manages
+    CointPair --> Token : contains 
